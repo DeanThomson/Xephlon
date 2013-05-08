@@ -5,10 +5,10 @@ var height = canvas.height;
 
 var paused;
 
-var then, now, delta, lastShot;
+var then, now, delta, lastShot, lastEnemy;
 
 var healthBar, specialBar, xpBar;
-var stars, bullets;
+var stars, bullets, enemies, enemyBullets;
 var up, down, left, right, shoot;
 var player;
 
@@ -41,8 +41,8 @@ function player(x, y) {
 	this.x = x;
 	this.y = y;
 	this.speed = 300;
-	this.pheight = 100; //20
-	this.pwidth = 76; //50
+	this.pheight = 100;
+	this.pwidth = 76;
 	
 	this.pimage = new Image();
 	this.pimage.src = "player.png";
@@ -51,6 +51,7 @@ function player(x, y) {
 	this.special = 0;
 	this.xp = 0;
 	this.level = 1;
+	this.bulletDamage = 50;
 	
 	this.update = function() {
 		if(up) this.y -= this.speed*delta;
@@ -80,23 +81,52 @@ function player(x, y) {
 	}
 	
 	this.shoot = function() {
-		bullets[bullets.length] = new bullet();
+		bullets[bullets.length] = new bullet(1, this.speed*2, this.x + (this.pwidth/2), this.y + (this.pheight/2));
 	}
 }
 
-function bullet() {
-	this.bheight = 9;
-	this.bwidth = 33;
-	this.x = player.x + (player.pwidth/2);
-	this.y = player.y + (player.pheight/2) - (this.bheight/2);
-	this.speed = player.speed*2;
-	this.damage = 50;
-	
-	var bimage = new Image();
-	bimage.src = "laserRed.png";
+function enemy(x, y) {
+	this.x = x;
+	this.y = y;
+	this.health = 100;
+	this.speed = 100;
+	this.eheight = 100;
+	this.ewidth = 76;
+	this.eimage = new Image();
+	this.eimage.src = "enemyShip.png";
 	
 	this.update = function() {
-		this.x += this.speed*delta;
+		this.x -= this.speed*delta;
+		if(Math.floor(Math.random()*500) == 1) this.shoot();
+	}
+	
+	this.draw = function() {
+		ctx.drawImage(this.eimage,this.x,this.y);
+	}
+	
+	this.shoot = function() {
+		enemyBullets[enemyBullets.length] = new bullet(-1, this.speed*2, this.x + (this.ewidth/2), this.y + (this.eheight/2));
+	}
+}
+
+function spawnEnemy() {
+	enemies[enemies.length] = new enemy(width,(Math.random()*(height-150))+50); // enemy(width, (Math.random()*(height-enemyheight-50))+50;
+}
+
+function bullet(direction, speed, x, y) {
+	this.direction = direction;
+	this.bheight = 9;
+	this.bwidth = 33;
+	this.x = x;
+	this.y = y - this.bheight/2;
+	this.speed = speed;
+	
+	var bimage = new Image();
+	if(direction == 1) bimage.src = "laserRed.png";
+	else bimage.src = "laserGreen.png";
+	
+	this.update = function() {
+		this.x += (this.speed*delta) * direction;
 	}
 	
 	this.draw = function() {
@@ -111,6 +141,39 @@ function updateBullets() {
 		bullets[i].update();
 	}
 	bullets.splice(0,j+1);
+	
+	for(var i=enemyBullets.length-1; i>=0; i--) {
+		if(enemyBullets[i].x < 0) enemyBullets.splice(i,1);
+		else enemyBullets[i].update();
+	}
+}
+
+function updateEnemies() {
+	for(var i=enemies.length-1; i>=0; i--) {
+		enemies[i].update();
+		if(enemies[i].x+enemies[i].width < 0) {
+			enemies.splice(i,1);
+		}
+	}
+}
+
+function checkBulletCollisions() {
+	for(var i=bullets.length-1; i>=0; i--) {
+		var tipX = bullets[i].x + bullets[i].bwidth;
+		var tipY = bullets[i].y + bullets[i].bheight/2;
+		for(var j=enemies.length-1; j>=0; j--) {
+			if(((tipX>enemies[j].x+5) && (tipX<(enemies[j].x+enemies[j].ewidth))) && ((tipY>enemies[j].y) && (tipY<(enemies[j].y+enemies[j].eheight)))) {
+				enemies[j].health -= player.bulletDamage;
+				if(enemies[j].health <= 0) {
+					enemies.splice(j, 1);
+					bullets.splice(i, 1);
+					break;
+				}
+				bullets.splice(i, 1);
+				break;
+			}
+		}
+	}
 }
 
 function statBar(title, color, value, x, y) {
@@ -170,10 +233,13 @@ function init() {
 	player = new player(50,height/2);
 	
 	bullets = [];
+	enemies = [];
+	enemyBullets = [];
 	
 	then = Date.now();
 	now = then;
 	lastShot = then;
+	lastEnemy = then;
 	
 	paused = false;
 }
@@ -187,10 +253,14 @@ function update() {
 	player.update();
 	
 	updateBullets();
+	updateEnemies();
+	checkBulletCollisions();
 	
-	//healthBar.value -= (Math.random()*50)*delta;
-	//specialBar.value += (Math.random()*50)*delta;
-	//xpBar.value += (Math.random()*50)*delta;
+	if((now - lastEnemy)/1000 > 2) {
+		spawnEnemy();
+		lastEnemy = now;
+	}
+	
 	if(player.health > 40) player.health -= 1;
 	player.xp = 25;
 	player.special = 125;
@@ -205,6 +275,14 @@ function render() {
 	
 	for(var i=0; i<stars.length; i++) {
 		stars[i].draw();
+	}
+	
+	for(var i=0; i<enemyBullets.length; i++) {
+		enemyBullets[i].draw();
+	}
+	
+	for(var i=0; i<enemies.length; i++) {
+		enemies[i].draw();
 	}
 	
 	for(var i=0; i<bullets.length; i++) {
