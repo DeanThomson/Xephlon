@@ -25,6 +25,13 @@ function drawUI() {
 	healthBar.draw();
 	specialBar.draw();
 	xpBar.draw();
+	
+	ctx.textAlign = "left";
+	ctx.textBaseline = "top";
+	ctx.fillStyle = "yellow";
+	ctx.font = "bold 20px courier";
+	ctx.fillText("Score: ".concat(player.score.toString()),5,0);
+	ctx.fillText("Level: ".concat(player.level.toString()),5,30);
 }
 
 function drawPauseScreen() {
@@ -52,6 +59,7 @@ function player(x, y) {
 	this.xp = 0;
 	this.level = 1;
 	this.bulletDamage = 50;
+	this.score = 0;
 	
 	this.update = function() {
 		if(up) this.y -= this.speed*delta;
@@ -64,9 +72,15 @@ function player(x, y) {
 		if(this.y < 50) this.y=50;
 		if(this.y > height-this.pheight) this.y = height-this.pheight;
 		
+		if(this.xp > (this.level*200)) {
+			this.xp = 0;
+			this.level += 1;
+		}
+		
 		healthBar.value = this.health;
 		specialBar.value = this.special;
-		xpBar.value = this.xp;
+		xpBar.value = (this.xp / (this.level*200))*200;
+		console.log(xpBar.value);
 		
 		if(shoot && (now - lastShot)/1000 > 0.2) {
 			this.shoot();
@@ -81,7 +95,7 @@ function player(x, y) {
 	}
 	
 	this.shoot = function() {
-		bullets[bullets.length] = new bullet(1, this.speed*2, this.x + (this.pwidth/2), this.y + (this.pheight/2));
+		bullets[bullets.length] = new bullet(1, this.speed*2, this.bulletDamage, this.x + (this.pwidth/2), this.y + (this.pheight/2));
 	}
 }
 
@@ -94,10 +108,13 @@ function enemy(x, y) {
 	this.ewidth = 76;
 	this.eimage = new Image();
 	this.eimage.src = "enemyShip.png";
+	this.bulletDamage = 25;
+	this.xp = 25;
+	this.score = 25;
 	
 	this.update = function() {
 		this.x -= this.speed*delta;
-		if(Math.floor(Math.random()*500) == 1) this.shoot();
+		if(Math.floor(Math.random()*200) == 1) this.shoot();
 	}
 	
 	this.draw = function() {
@@ -105,7 +122,7 @@ function enemy(x, y) {
 	}
 	
 	this.shoot = function() {
-		enemyBullets[enemyBullets.length] = new bullet(-1, this.speed*2, this.x + (this.ewidth/2), this.y + (this.eheight/2));
+		enemyBullets[enemyBullets.length] = new bullet(-1, this.speed*3, this.bulletDamage, this.x + (this.ewidth/2), this.y + (this.eheight/2));
 	}
 }
 
@@ -113,13 +130,14 @@ function spawnEnemy() {
 	enemies[enemies.length] = new enemy(width,(Math.random()*(height-150))+50); // enemy(width, (Math.random()*(height-enemyheight-50))+50;
 }
 
-function bullet(direction, speed, x, y) {
+function bullet(direction, speed, damage, x, y) {
 	this.direction = direction;
 	this.bheight = 9;
 	this.bwidth = 33;
 	this.x = x;
 	this.y = y - this.bheight/2;
 	this.speed = speed;
+	this.damage = damage;
 	
 	var bimage = new Image();
 	if(direction == 1) bimage.src = "laserRed.png";
@@ -158,13 +176,17 @@ function updateEnemies() {
 }
 
 function checkBulletCollisions() {
+	
+	// Player bullets
 	for(var i=bullets.length-1; i>=0; i--) {
 		var tipX = bullets[i].x + bullets[i].bwidth;
 		var tipY = bullets[i].y + bullets[i].bheight/2;
 		for(var j=enemies.length-1; j>=0; j--) {
 			if(((tipX>enemies[j].x+5) && (tipX<(enemies[j].x+enemies[j].ewidth))) && ((tipY>enemies[j].y) && (tipY<(enemies[j].y+enemies[j].eheight)))) {
-				enemies[j].health -= player.bulletDamage;
+				enemies[j].health -= bullets[i].damage;
 				if(enemies[j].health <= 0) {
+					player.xp += enemies[j].xp;
+					player.score += enemies[j].score;
 					enemies.splice(j, 1);
 					bullets.splice(i, 1);
 					break;
@@ -172,6 +194,17 @@ function checkBulletCollisions() {
 				bullets.splice(i, 1);
 				break;
 			}
+		}
+	}
+	
+	// Enemy bullets
+	for(var i=enemyBullets.length-1; i>=0; i--) {
+		var tipX = enemyBullets[i].x;
+		var tipY = enemyBullets[i].y + enemyBullets[i].bheight/2;
+		if((tipX>player.x && tipX<player.x+player.pwidth) && ((tipY<player.y+player.pheight) && (tipY>player.y))) {
+			player.health -= enemyBullets[i].damage;
+			enemyBullets.splice(i,1);
+			break;
 		}
 	}
 }
@@ -250,8 +283,6 @@ function update() {
 		stars[i].update();
 	}
 	
-	player.update();
-	
 	updateBullets();
 	updateEnemies();
 	checkBulletCollisions();
@@ -261,9 +292,7 @@ function update() {
 		lastEnemy = now;
 	}
 	
-	if(player.health > 40) player.health -= 1;
-	player.xp = 25;
-	player.special = 125;
+	player.update();
 	
 	healthBar.update();
 	specialBar.update();
